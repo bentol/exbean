@@ -1,0 +1,2 @@
+defmodule ExbeanTest do
+end

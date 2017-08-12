@@ -48,4 +48,24 @@ defmodule CommandWatchTest do
     {:ok, data} = :gen_tcp.recv(sock, 0)
     assert "USING #{tube}\r\n" == data
   end
+
+  test "use ${tube}, multiple in one send", %{sock: sock} do
+    :gen_tcp.send(sock, "use test1\r\nuse test2\r\n")
+    {:ok, data} = :gen_tcp.recv(sock, 0, 1000)
+    concat_data = data
+    data = case :gen_tcp.recv(sock, 0, 1000) do
+      {:ok, data} -> data
+      {:error, _} -> ""
+    end
+    concat_data = concat_data <> data
+    assert "USING test1\r\nUSING test2\r\n" == concat_data
+  end
+
+  test "use ${tube}, not complete message", %{sock: sock} do
+    :gen_tcp.send(sock, "use ")
+    {:error, :timeout} = :gen_tcp.recv(sock, 0, 1)
+    :gen_tcp.send(sock, "my_tube\r\n")
+    {:ok, data} = :gen_tcp.recv(sock, 0, 1000)
+    assert "USING my_tube\r\n" == data
+  end
 end

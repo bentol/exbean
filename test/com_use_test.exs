@@ -8,20 +8,29 @@ defmodule CommandWatchTest do
 
   test "use ${tube}, should return 'USING ${tube}", %{sock: sock} do
     :gen_tcp.send(sock, "use newtube\r\n")
-    {:ok, data} = :gen_tcp.recv(sock, 0)
+    {:ok, data} = :gen_tcp.recv(sock, 0 )
     assert "USING newtube\r\n" == data
+
+    :gen_tcp.send(sock, "list-tube-used\r\n")
+    assert {:ok, "USING newtube\r\n"} == :gen_tcp.recv(sock, 0, 10)
   end
 
   test "use ${tube}, cannot start with hypen", %{sock: sock} do
     :gen_tcp.send(sock, "use -newtube\r\n")
     {:ok, data} = :gen_tcp.recv(sock, 0)
     assert "BAD_FORMAT\r\n" == data
+
+    :gen_tcp.send(sock, "list-tube-used\r\n")
+    assert {:ok, "USING default\r\n"} = :gen_tcp.recv(sock, 0, 10)
   end
 
   test "use ${tube}, minimal 1 character", %{sock: sock} do
     :gen_tcp.send(sock, "use \r\n")
     {:ok, data} = :gen_tcp.recv(sock, 0)
     assert "BAD_FORMAT\r\n" == data
+
+    :gen_tcp.send(sock, "list-tube-used\r\n")
+    assert {:ok, "USING default\r\n"} = :gen_tcp.recv(sock, 0, 10)
   end
 
   test "use ${tube}, maximum 200 bytes", %{sock: sock} do
@@ -30,16 +39,25 @@ defmodule CommandWatchTest do
     {:ok, data} = :gen_tcp.recv(sock, 0)
     assert "BAD_FORMAT\r\n" == data
 
+    :gen_tcp.send(sock, "list-tube-used\r\n")
+    assert {:ok, "USING default\r\n"} = :gen_tcp.recv(sock, 0, 10)
+
     tube2 = String.duplicate("A", 200)
     :gen_tcp.send(sock, "use #{tube2}\r\n")
     {:ok, data} = :gen_tcp.recv(sock, 0)
     assert "USING #{tube2}\r\n" == data
+
+    :gen_tcp.send(sock, "list-tube-used\r\n")
+    assert {:ok, "USING #{tube2}\r\n"} == :gen_tcp.recv(sock, 0, 10)
   end
 
   test "use ${tube}, cannot contain forbidden symbol", %{sock: sock} do
     :gen_tcp.send(sock, "use mytube*\r\n")
     {:ok, data} = :gen_tcp.recv(sock, 0)
     assert "BAD_FORMAT\r\n" == data
+
+    :gen_tcp.send(sock, "list-tube-used\r\n")
+    assert {:ok, "USING default\r\n"} = :gen_tcp.recv(sock, 0, 10)
   end
 
   test "use ${tube}, can contain whitelisted symbol", %{sock: sock} do
@@ -47,6 +65,9 @@ defmodule CommandWatchTest do
     :gen_tcp.send(sock, "use #{tube}\r\n")
     {:ok, data} = :gen_tcp.recv(sock, 0)
     assert "USING #{tube}\r\n" == data
+
+    :gen_tcp.send(sock, "list-tube-used\r\n")
+    assert {:ok, "USING #{tube}\r\n"} == :gen_tcp.recv(sock, 0, 10)
   end
 
   test "use ${tube}, multiple in one send", %{sock: sock} do
@@ -59,6 +80,9 @@ defmodule CommandWatchTest do
     end
     concat_data = concat_data <> data
     assert "USING test1\r\nUSING test2\r\n" == concat_data
+
+    :gen_tcp.send(sock, "list-tube-used\r\n")
+    assert {:ok, "USING test2\r\n"} == :gen_tcp.recv(sock, 0, 10)
   end
 
   test "use ${tube}, not complete message", %{sock: sock} do
@@ -67,5 +91,8 @@ defmodule CommandWatchTest do
     :gen_tcp.send(sock, "my_tube\r\n")
     {:ok, data} = :gen_tcp.recv(sock, 0, 1000)
     assert "USING my_tube\r\n" == data
+
+    :gen_tcp.send(sock, "list-tube-used\r\n")
+    assert {:ok, "USING my_tube\r\n"} == :gen_tcp.recv(sock, 0, 10)
   end
 end

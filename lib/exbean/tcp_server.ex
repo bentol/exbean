@@ -3,6 +3,9 @@ defmodule Exbean.TcpServer do
   require IEx
   use Rop
 
+  @internal_error "INTERNAL_ERROR\r\n"
+  @bad_format "BAD_FORMAT\r\n"
+
   def accept(port) do
     {:ok, socket} = :gen_tcp.listen(
       port,
@@ -23,6 +26,7 @@ defmodule Exbean.TcpServer do
   end
 
   defp serve(socket) do
+    Exbean.SessionProfile.start_link(socket)
     serve(socket, "")
   end
 
@@ -37,7 +41,7 @@ defmodule Exbean.TcpServer do
     |> Enum.each(fn command ->
       command
       |> log_command(socket)
-      |> process()
+      |> process(socket)
       |> log_output(socket)
       |> write_output(socket)
     end)
@@ -66,10 +70,11 @@ defmodule Exbean.TcpServer do
   end
 
   defp save_to_buffer(socket, buffer) do
-    data = case :gen_tcp.recv(socket, 0) do
-      {:ok, data} -> data
-      {:error, :closed} -> Process.exit(self(), :normal)
-    end
+    data =
+      case :gen_tcp.recv(socket, 0) do
+        {:ok, data} -> data
+        {:error, :closed} -> Process.exit(self(), :normal)
+      end
     buffer <> data
   end
 
@@ -89,11 +94,23 @@ defmodule Exbean.TcpServer do
     :gen_tcp.send(socket, output)
   end
 
-  defp process({:ok, {:use, tube}}) do
-    Exbean.CommandHandler.Use.handle(tube)
+  defp process({:ok, {:use, tube}}, socket) do
+    case Exbean.CommandHandler.Use.handle(tube, socket) do
+      {:ok, msg} -> msg <> "\r\n"
+      {:error, msg} -> msg <> "\r\n"
+      {:bad_format} -> @bad_format
+      {:error} -> @internal_error
+    end
   end
 
-  defp process(_) do
+  defp process({:ok, {:"list-tube-used"}}, socket) do
+    case Exbean.CommandHandler.ListTubeUsed .handle(socket) do
+      {:ok, msg} -> msg <> "\r\n"
+      _ -> "BAD_FORMAT\r\n"
+    end
+  end
+
+  defp process(_, _) do
     "UNKNOWN_COMMAND\r\n"
   end
 
@@ -107,6 +124,7 @@ defmodule Exbean.TcpServer do
 
     case command do
       "use " <> tube -> {:use, tube}
+      "list-tube-used" -> {:"list-tube-used"}
       _ -> {:error}
     end
   end

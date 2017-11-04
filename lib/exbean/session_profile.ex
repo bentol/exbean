@@ -1,6 +1,7 @@
 defmodule Exbean.SessionProfile do
   use GenServer
   alias Exbean.CommandHandler.Helper
+  require IEx
 
   # Client api
   def start_link(socket) do
@@ -34,6 +35,7 @@ defmodule Exbean.SessionProfile do
       Helper.validate_tube_name(tube) == false ->
         {:reply, {:bad_format}, state}
       true ->
+        {:ok, _} = Exbean.Tube.start(tube)
         {:reply, {:ok, tube}, %{state | use: tube}}
     end
   end

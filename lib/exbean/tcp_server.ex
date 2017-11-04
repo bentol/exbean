@@ -7,6 +7,8 @@ defmodule Exbean.TcpServer do
   @bad_format "BAD_FORMAT\r\n"
 
   def accept(port) do
+    Exbean.Tube.start("default")
+
     {:ok, socket} = :gen_tcp.listen(
       port,
       [:binary, active: false, reuseaddr: true]
@@ -36,15 +38,20 @@ defmodule Exbean.TcpServer do
 
     {buffer, commands} = extract_commands(buffer)
 
-    commands
+    output_buffer = commands
     |> Enum.reverse
-    |> Enum.each(fn command ->
+    |> Enum.map(fn command ->
+      IO.inspect "+++"
+      IO.inspect command
+      IO.inspect "---"
       command
       |> log_command(socket)
       |> process(socket)
       |> log_output(socket)
-      |> write_output(socket)
     end)
+    |> Enum.join()
+
+    write_output(output_buffer, socket)
 
     serve(socket, buffer)
   end
@@ -58,13 +65,19 @@ defmodule Exbean.TcpServer do
         command = raw_command
         |> normalize_command
 
-        if command == {:error} do
-          Process.exit(self(), :error)
-        end
-
         buffer = String.slice(buffer, String.length(raw_command) + 1, 100000)
 
-        extract_commands(buffer, [command | commands])
+        {command, buffer} =
+          case command do
+            {:put, attrs} -> Exbean.CommandHandler.Put.build_command(attrs, buffer)
+            _ -> {command, buffer}
+          end
+
+        case command do
+          nil -> {buffer, commands}
+          _ -> extract_commands(buffer, [command | commands])
+        end
+
       false -> {buffer, commands}
     end
   end
@@ -78,11 +91,18 @@ defmodule Exbean.TcpServer do
     buffer <> data
   end
 
+  defp log_command({:error, command}, socket) do
+    {:ok, {client_ip, _}} = :inet.peername(socket)
+    Logger.debug "Invalid message from #{client_ip |> Tuple.to_list |> Enum.join(".")}: #{inspect command}"
+    {:error, command}
+  end
+
   defp log_command(command, socket) do
     {:ok, {client_ip, _}} = :inet.peername(socket)
     Logger.debug "New message from #{client_ip |> Tuple.to_list |> Enum.join(".")}: #{inspect command}"
     {:ok, command}
   end
+
 
   defp log_output(output, socket) do
     {:ok, {client_ip, _}} = :inet.peername(socket)
@@ -106,8 +126,33 @@ defmodule Exbean.TcpServer do
   defp process({:ok, {:"list-tube-used"}}, socket) do
     case Exbean.CommandHandler.ListTubeUsed .handle(socket) do
       {:ok, msg} -> msg <> "\r\n"
-      _ -> "BAD_FORMAT\r\n"
+      _ -> @bad_format
     end
+  end
+
+  defp process({:ok, {:put, props} = command}, socket) do
+    case Exbean.CommandHandler.Put.handle(command, socket) do
+      {:ok, msg} -> msg <> "\r\n"
+      _ -> @bad_format
+    end
+  end
+
+  defp process({:ok, {:peek, job_id} = command}, socket) do
+    case Exbean.CommandHandler.Peek.handle(command, socket) do
+      {:ok, msg} -> msg <> "\r\n"
+      _ -> @bad_format
+    end
+  end
+
+  defp process({:ok, {:delete, job_id} = command}, socket) do
+    case Exbean.CommandHandler.Delete.handle(command, socket) do
+      {:ok, msg} -> msg <> "\r\n"
+      _ -> @bad_format
+    end
+  end
+
+  defp process({:ok, {:bad_format, _}}, _) do
+    "BAD_FORMAT\r\n"
   end
 
   defp process(_, _) do
@@ -115,7 +160,6 @@ defmodule Exbean.TcpServer do
   end
 
   defp normalize_command(command) do
-
     command =
       case {String.at(command, -2), String.at(command, -1)} do
         {"\r", "\n"} -> command |> String.split_at(-1) |> elem(0)
@@ -125,7 +169,10 @@ defmodule Exbean.TcpServer do
     case command do
       "use " <> tube -> {:use, tube}
       "list-tube-used" -> {:"list-tube-used"}
-      _ -> {:error}
+      "put " <> attrs -> {:put, attrs: attrs }
+      "peek " <> job_id -> {:peek, job_id}
+      "delete " <> job_id -> {:delete, job_id}
+      _ -> {:error, command}
     end
   end
 

@@ -6,4 +6,4 @@ defmodule TestHelper do
 end
 
 ExUnit.configure(exclude: [pending: true])
-ExUnit.start()
+ExUnit.start(timeout: 99999999)

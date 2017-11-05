@@ -123,8 +123,23 @@ defmodule Exbean.TcpServer do
     end
   end
 
+  defp process({:ok, {:watch, tube}}, socket) do
+    case Exbean.CommandHandler.Watch.handle(tube, socket) do
+      {:ok, msg} -> msg <> "\r\n"
+      {:bad_format} -> @bad_format
+      {:error} -> @internal_error
+    end
+  end
+
   defp process({:ok, {:"list-tube-used"}}, socket) do
     case Exbean.CommandHandler.ListTubeUsed .handle(socket) do
+      {:ok, msg} -> msg <> "\r\n"
+      _ -> @bad_format
+    end
+  end
+
+  defp process({:ok, {:"list-tubes-watched"}}, socket) do
+    case Exbean.CommandHandler.ListTubesWatched.handle(socket) do
       {:ok, msg} -> msg <> "\r\n"
       _ -> @bad_format
     end
@@ -168,7 +183,9 @@ defmodule Exbean.TcpServer do
 
     case command do
       "use " <> tube -> {:use, tube}
+      "watch " <> tube -> {:watch, tube}
       "list-tube-used" -> {:"list-tube-used"}
+      "list-tubes-watched" -> {:"list-tubes-watched"}
       "put " <> attrs -> {:put, attrs: attrs }
       "peek " <> job_id -> {:peek, job_id}
       "delete " <> job_id -> {:delete, job_id}

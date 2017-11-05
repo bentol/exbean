@@ -9,7 +9,13 @@ defmodule Exbean.Tube do
   # Client api
   def start_link(name) do
     tuple_name = via_tuple(name)
-    GenServer.start_link(__MODULE__, name, name: tuple_name)
+
+    case GenServer.whereis(tuple_name) do
+      nil ->
+        GenServer.start_link(__MODULE__, name, name: tuple_name)
+      pid ->
+        {:ok, pid}
+    end
   end
 
   def start(name) do

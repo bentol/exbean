@@ -21,9 +21,23 @@ defmodule Exbean.SessionProfile do
     GenServer.call(via_tuple(socket), {:get_used_tube})
   end
 
+  def watch_tube(socket, tube) do
+    GenServer.call(via_tuple(socket), {:watch_tube, tube})
+  end
+
+  def get_watched_tube(socket) do
+    GenServer.call(via_tuple(socket), {:get_watched_tube})
+  end
+
   # Server implementation
   def init(socket) do
-    {:ok, %{socket: socket, use: "default"}}
+    {:ok,
+      %{
+        socket: socket,
+        use: "default",
+        watched: ["default"]
+      }
+    }
   end
 
   def handle_call({:use_tube, tube}, _from, state) do
@@ -40,7 +54,26 @@ defmodule Exbean.SessionProfile do
     end
   end
 
+  def handle_call({:watch_tube, tube}, _from, %{watched: watched_tubes} = state) do
+
+    cond do
+      Helper.validate_tube_name(tube) == false ->
+        {:reply, {:bad_format}, state}
+      true ->
+        {:ok, _} = Exbean.Tube.start(tube)
+        watched_tubes = case Enum.member?(watched_tubes, tube) do
+          true -> watched_tubes
+          false -> watched_tubes ++ [tube]
+        end
+        {:reply, {:ok, watched_tubes}, %{state | watched: watched_tubes}}
+    end
+  end
+
   def handle_call({:get_used_tube}, _from, %{use: tube} = state) do
     {:reply, {:ok, tube}, state}
+  end
+
+  def handle_call({:get_watched_tube}, _from, %{watched: tubes} = state) do
+    {:reply, tubes, state}
   end
 end

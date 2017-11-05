@@ -25,6 +25,10 @@ defmodule Exbean.SessionProfile do
     GenServer.call(via_tuple(socket), {:watch_tube, tube})
   end
 
+  def ignore_tube(socket, tube) do
+    GenServer.call(via_tuple(socket), {:ignore_tube, tube})
+  end
+
   def get_watched_tube(socket) do
     GenServer.call(via_tuple(socket), {:get_watched_tube})
   end
@@ -67,6 +71,18 @@ defmodule Exbean.SessionProfile do
         end
         {:reply, {:ok, watched_tubes}, %{state | watched: watched_tubes}}
     end
+  end
+
+  def handle_call({:ignore_tube, tube}, _from, %{watched: watched_tubes} = state) do
+    {reply, watched_tubes} =
+      case {Enum.member?(watched_tubes, tube), length(watched_tubes)} do
+        {true, 1} -> { {:error, :not_ignored}, watched_tubes}
+        _ -> 
+          new_watched_tubes = List.delete(watched_tubes, tube)
+          { {:ok, new_watched_tubes}, new_watched_tubes}
+      end
+
+    {:reply, reply, %{state | watched: watched_tubes}}
   end
 
   def handle_call({:get_used_tube}, _from, %{use: tube} = state) do

@@ -1,4 +1,4 @@
-defmodule CommandWatchTest do
+defmodule CommandUseTest do
   use ExUnit.Case
 
   setup do
